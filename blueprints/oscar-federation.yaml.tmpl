@@ -67,6 +67,8 @@ entries:
         - !KeyOf scope-oscar-groups
       redirect_uris:
         - matching_mode: strict
+          url: "https://__HUB_DOMAIN__/callback"
+        - matching_mode: strict
           url: "https://__HUB_DOMAIN__/oauth2/callback"
         - matching_mode: regex
           url: '^https://[a-z0-9-]+\.__HUB_DOMAIN_ESCAPED__/login/oidc/callback$'
@@ -79,5 +81,5 @@ entries:
     attrs:
       name: "OSCAR Federated Sites & Tunnel"
       provider: !KeyOf provider-oscar-federation
-      meta_launch_url: "https://portal.__HUB_DOMAIN__/services"
+      meta_launch_url: "https://portal.__HUB_DOMAIN__"
       policy_engine_mode: any

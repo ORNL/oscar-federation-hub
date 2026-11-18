@@ -1,6 +1,6 @@
 kind: User
 metadata:
-  name: oscar-node-__SITE_SLUG__
+  name: __CONNECTOR_USER__
   displayName: "__SITE_DISPLAY_NAME__ Workload Connector"
 spec:
   type: WORKLOAD
@@ -9,20 +9,19 @@ kind: Service
 metadata:
   name: __SITE_SLUG__
   displayName: "__SITE_DISPLAY_NAME__"
-  labels:
-    app: oscar
 spec:
-  mode: HTTP
+  mode: WEB
   isPublic: true
   config:
     tls:
       insecureSkipVerify: true
     http:
+__TRUSTED_AUTH_BLOCK__
       header:
         authorizationMode: PASS
         host:
           preserve: true
 __TRUSTED_HEADERS_BLOCK__
     upstream:
-      user: oscar-node-__SITE_SLUG__
+      user: __CONNECTOR_USER__
       url: https://gateway:8443

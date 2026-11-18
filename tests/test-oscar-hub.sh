@@ -28,11 +28,12 @@ assert_contains() {
     }
 }
 
-printf '1. Testing Mode A (--with-authentik --dry-run) lifecycle...\n'
+printf '1. Testing Mode A (--with-authentik --runtime k8s --dry-run) lifecycle...\n'
 state_a="$tmp_root/state-authentik"
 OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" init \
     --domain hub.example.org \
     --with-authentik \
+    --runtime k8s \
     --admin-email secops@example.org \
     --dry-run >/dev/null
 
@@ -41,12 +42,17 @@ assert_file_mode "$state_a/authentik.env" 600
 assert_file_mode "$state_a/secrets/oidc-client-secret.txt" 600
 assert_file_mode "$state_a/secrets/oscar-tunnel-shared-secret.txt" 600
 assert_file_mode "$state_a/rendered/oscar-federation.yaml" 600
+assert_file_mode "$state_a/rendered/k8s-authentik.yaml" 600
 assert_file_mode "$state_a/rendered/octelium-base.yaml" 600
+assert_file_mode "$state_a/rendered/octelium-idp.yaml" 600
 
-assert_contains "$state_a/rendered/octelium-base.yaml" "issuerURL: https://auth.hub.example.org/application/o/oscar-federation-sso/"
+assert_contains "$state_a/rendered/octelium-base.yaml" "url: http://authentik-server.oscar-authentik.svc:9000"
+assert_contains "$state_a/rendered/octelium-idp.yaml" "issuerURL: https://auth.hub.example.org/application/o/oscar-federation-sso/"
+assert_contains "$state_a/rendered/octelium-idp.yaml" "fromSecret: oscar-authentik-client-secret"
 assert_contains "$state_a/rendered/oscar-federation.yaml" "name: oscar-admins"
 assert_contains "$state_a/rendered/oscar-federation.yaml" "name: oscar-operators"
 assert_contains "$state_a/rendered/oscar-federation.yaml" "name: oscar-viewers"
+assert_contains "$state_a/rendered/oscar-federation.yaml" "https://hub.example.org/callback"
 assert_contains "$state_a/rendered/oscar-federation.yaml" 'https://[a-z0-9-]+\.hub\.example\.org/login/oidc/callback'
 
 if command -v docker >/dev/null 2>&1; then
@@ -64,13 +70,15 @@ OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" add-site north-gat
 
 assert_file_mode "$state_a/sites/north-gate.yaml" 600
 assert_file_mode "$state_a/tokens/north-gate.token" 600
-assert_contains "$state_a/sites/north-gate.yaml" "X-Oscar-Tunnel-Secret:"
-assert_contains "$state_a/sites/north-gate.yaml" "X-Octelium-User: \"ctx.user.metadata.name\""
-assert_contains "$state_a/sites/north-gate.yaml" "X-Octelium-Groups: \"ctx.user.spec.groups\""
+assert_contains "$state_a/sites/north-gate.yaml" "mode: WEB"
+assert_contains "$state_a/sites/north-gate.yaml" "fromSecret: oscar-tunnel-shared-secret"
+assert_contains "$state_a/sites/north-gate.yaml" "key: X-Octelium-User"
+assert_contains "$state_a/sites/north-gate.yaml" "key: X-Octelium-Groups"
 
 status_out=$(OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" status)
 grep -Fq -- "https://north-gate.hub.example.org" <<<"$status_out"
 
+OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" sync-users --dry-run >/dev/null
 OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" upgrade --dry-run >/dev/null
 OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" remove-site north-gate --dry-run >/dev/null
 [[ ! -e "$state_a/sites/north-gate.yaml" && ! -e "$state_a/tokens/north-gate.token" ]] || {
@@ -84,8 +92,8 @@ OSCAR_HUB_STATE_DIR="$state_b" bash "$repo_root/oscar-hub.sh" init \
     --domain hub.example.org \
     --dry-run >/dev/null
 
-if grep -Fq -- "kind: IdentityProvider" "$state_b/rendered/octelium-base.yaml"; then
-    printf 'FAIL: lightweight mode unexpectedly rendered Authentik IdentityProvider\n' >&2
+if grep -Fq -- "name: auth" "$state_b/rendered/octelium-base.yaml"; then
+    printf 'FAIL: lightweight mode unexpectedly rendered Authentik auth service\n' >&2
     exit 1
 fi
 

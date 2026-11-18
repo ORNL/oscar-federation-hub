@@ -7,7 +7,7 @@ spec:
     - name: allow-oscar-services
       effect: ALLOW
       condition:
-        match: 'ctx.service.metadata.name.startsWith("oscar-") || ctx.service.metadata.labels["app"] == "oscar"'
+        match: 'ctx.service.spec.mode == "WEB" && !ctx.service.metadata.isSystem'
 ---
 kind: Group
 metadata:
@@ -35,4 +35,4 @@ spec:
   authorization:
     policies:
       - oscar-operator-policy
-__AUTHENTIK_IDP_BLOCK__
+__AUTHENTIK_SERVICE_BLOCK__

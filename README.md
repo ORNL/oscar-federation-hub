@@ -14,10 +14,10 @@ Turnkey, self-hosted **Zero-Trust Remote Access** and **Centralized SSO User Man
 | Capability | Mode A: Browser Admin GUI (`--with-authentik`, Recommended) | Mode B: Lightweight CLI (Default, `octeliumctl` only) |
 | :--- | :--- | :--- |
 | **Outbound Zero-Trust Tunnel (`443`)** | Yes (Octelium) | Yes (Octelium) |
-| **How Admins Add / Disable Users** | Point-and-click web console (`https://auth.<domain>/if/admin/`) | `./oscar-hub.sh add-user` / `remove-user` CLI |
+| **How Admins Add / Disable Users** | Point-and-click web console (`https://auth.<domain>/if/admin/`) with automatic 30s Octelium user/group sync | `./oscar-hub.sh add-user` / `remove-user` CLI |
 | **Role Assignment Across Federated Sites** | Drag user into `oscar-admins`, `oscar-operators`, or `oscar-viewers` | `--group oscar-admins \| oscar-operators \| oscar-viewers` |
 | **1-Click Shortcut Inside OSCAR `/users`** | **Open Federated User Console** button opens Authentik directly | Optional |
-| **Extra Hub RAM Footprint** | ~1.2 GB (Authentik + PostgreSQL + Redis) | Minimal (Octelium cluster only) |
+| **Extra Hub RAM Footprint** | ~1.5 GB (Authentik + PostgreSQL + Redis in K3s or Docker; 8 GB total Hub RAM recommended) | Minimal (Octelium cluster only) |
 | **Coexists with Local OSCAR Passkeys?** | **Yes** — local emergency accounts & hardware Passkeys continue working offline on LAN | **Yes** |
 
 ---
@@ -28,7 +28,7 @@ Turnkey, self-hosted **Zero-Trust Remote Access** and **Centralized SSO User Man
    - `hub.example.org` -> Hub public/VPN IP
    - `*.hub.example.org` -> Hub public/VPN IP (covers `auth.hub.example.org`, `north-gate.hub.example.org`, `central.hub.example.org`, etc.)
 2. An initialized [Octelium](https://octelium.com/docs) cluster on the Hub host with `octeliumctl` authenticated as admin.
-3. Docker Engine `24+` with `docker compose` v2 (required when using `--with-authentik`).
+3. For `--with-authentik`: `oscar-hub.sh` automatically detects **K3s (`kubectl`)** on standard Octelium Hub hosts (`--runtime k8s`) and exposes `https://auth.<domain>` through Octelium's wildcard TLS edge, or falls back to Docker Engine `24+` with `docker compose` v2 (`--runtime docker`).
 
 ---
 
@@ -97,6 +97,12 @@ See **[docs/OSCAR_NODE_SETUP.md](docs/OSCAR_NODE_SETUP.md)** for the complete wa
 
 # Register another OSCAR server
 ./oscar-hub.sh add-site south-dock --display-name "South Dock RPMs" --with-trusted-headers
+
+# Update an existing site's route/headers in place without rotating its connector token
+./oscar-hub.sh add-site south-dock --display-name "South Dock RPMs" --connector-user oscar-node-south-dock --no-mint-token --with-trusted-headers
+
+# Force an immediate Authentik -> Octelium user/group reconciliation (also runs automatically every 30s)
+./oscar-hub.sh sync-users
 
 # Decommission a site and revoke its workload token immediately
 ./oscar-hub.sh remove-site south-dock
