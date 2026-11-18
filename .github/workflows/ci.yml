@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ShellCheck, Compose & CLI Contract Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        run: shellcheck oscar-hub.sh tests/test-oscar-hub.sh
+
+      - name: Run OSCAR Federation Hub contract tests
+        run: bash tests/test-oscar-hub.sh
+
+      - name: Audit repository hygiene (no private IPs, tokens, or secrets)
+        run: |
+          if grep -rnE '192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+|BEGIN (RSA |EC )?PRIVATE KEY' \
+            --exclude-dir=.git .; then
+            echo "ERROR: Private IP or key material detected in repository!" >&2
+            exit 1
+          fi

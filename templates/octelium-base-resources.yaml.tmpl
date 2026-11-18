@@ -1,0 +1,38 @@
+kind: Policy
+metadata:
+  name: oscar-operator-policy
+  displayName: OSCAR Federated Site Access Policy
+spec:
+  rules:
+    - name: allow-oscar-services
+      effect: ALLOW
+      condition:
+        match: 'ctx.service.metadata.name.startsWith("oscar-") || ctx.service.metadata.labels["app"] == "oscar"'
+---
+kind: Group
+metadata:
+  name: oscar-admins
+  displayName: OSCAR Administrators
+spec:
+  authorization:
+    policies:
+      - oscar-operator-policy
+---
+kind: Group
+metadata:
+  name: oscar-operators
+  displayName: OSCAR Operators
+spec:
+  authorization:
+    policies:
+      - oscar-operator-policy
+---
+kind: Group
+metadata:
+  name: oscar-viewers
+  displayName: OSCAR Viewers
+spec:
+  authorization:
+    policies:
+      - oscar-operator-policy
+__AUTHENTIK_IDP_BLOCK__

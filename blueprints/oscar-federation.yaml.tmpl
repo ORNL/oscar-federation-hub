@@ -1,0 +1,83 @@
+version: 1
+metadata:
+  name: OSCAR Federation Hub — Groups, Scopes & OIDC Application
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  # 1. Pre-create the three canonical OSCAR RBAC groups so admins can assign access in 1 click
+  - model: authentik_core.group
+    id: group-oscar-admins
+    identifiers:
+      name: oscar-admins
+    attrs:
+      is_superuser: false
+      attributes:
+        description: "Full Administrator control across Octelium tunnel services and federated OSCAR nodes."
+
+  - model: authentik_core.group
+    id: group-oscar-operators
+    identifiers:
+      name: oscar-operators
+    attrs:
+      is_superuser: false
+      attributes:
+        description: "Live lane monitoring, alarm acknowledgment, adjudication, and report generation."
+
+  - model: authentik_core.group
+    id: group-oscar-viewers
+    identifiers:
+      name: oscar-viewers
+    attrs:
+      is_superuser: false
+      attributes:
+        description: "Read-only National View, Event Log, video/spectrum review, and report viewing."
+
+  # 2. Scope mapping that emits standard `groups` array in OIDC ID tokens and UserInfo
+  - model: authentik_providers_oauth2.scopemapping
+    id: scope-oscar-groups
+    identifiers:
+      managed: goauthentik.io/providers/oauth2/oscar-federation-groups
+    attrs:
+      name: "OSCAR Federation Groups Claim"
+      scope_name: groups
+      description: "Includes assigned OSCAR role groups (oscar-admins, oscar-operators, oscar-viewers) in OIDC tokens."
+      expression: |
+        return {
+            "groups": [group.name for group in request.user.ak_groups.all()],
+        }
+
+  # 3. Shared OAuth2 / OIDC Provider pre-wired for Octelium Hub + federated OSCAR nodes
+  - model: authentik_providers_oauth2.oauth2provider
+    id: provider-oscar-federation
+    identifiers:
+      name: oscar-federation-oidc-provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      client_type: confidential
+      client_id: "__OIDC_CLIENT_ID__"
+      client_secret: "__OIDC_CLIENT_SECRET__"
+      sub_mode: user_username
+      include_claims_in_id_token: true
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        - !KeyOf scope-oscar-groups
+      redirect_uris:
+        - matching_mode: strict
+          url: "https://__HUB_DOMAIN__/oauth2/callback"
+        - matching_mode: regex
+          url: '^https://[a-z0-9-]+\.__HUB_DOMAIN_ESCAPED__/login/oidc/callback$'
+
+  # 4. Authentik Application visible in the user portal
+  - model: authentik_core.application
+    id: app-oscar-federation
+    identifiers:
+      slug: oscar-federation-sso
+    attrs:
+      name: "OSCAR Federated Sites & Tunnel"
+      provider: !KeyOf provider-oscar-federation
+      meta_launch_url: "https://portal.__HUB_DOMAIN__/services"
+      policy_engine_mode: any

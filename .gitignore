@@ -1,0 +1,14 @@
+# Runtime state, secrets, tokens, and rendered local manifests (NEVER commit)
+state/
+secrets/
+tokens/
+.env
+*.env.local
+*.token
+*.key
+*.pem
+*.crt
+*.db
+*.sqlite3
+blueprints/oscar-federation.yaml
+.DS_Store
