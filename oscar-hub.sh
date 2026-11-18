@@ -155,6 +155,50 @@ EOF
     systemctl enable --now oscar-hub-sync.timer >/dev/null 2>&1 || true
 }
 
+maybe_refresh_certbot_san() {
+    local domain=$1 required_fqdn=$2 dry_run=$3
+    [[ $dry_run != true && $(id -u) -eq 0 ]] || return 0
+    local live_dir="/etc/letsencrypt/live/$domain"
+    [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 0
+    command -v certbot >/dev/null 2>&1 && command -v openssl >/dev/null 2>&1 || return 0
+
+    local sans
+    sans=$(openssl x509 -in "$live_dir/fullchain.pem" -noout -ext subjectAltName 2>/dev/null || true)
+    if grep -Fq -- "DNS:*.$domain" <<<"$sans" || grep -Fq -- "DNS:$required_fqdn" <<<"$sans"; then
+        return 0
+    fi
+
+    info "Expanding Let's Encrypt HTTP-01 certificate ($domain) to include $required_fqdn..."
+    mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+    cat >/etc/letsencrypt/renewal-hooks/deploy/octelium-cert-sync.sh <<EOF
+#!/usr/bin/env bash
+if command -v kubectl >/dev/null 2>&1 && kubectl -n octelium get secret cert-cluster >/dev/null 2>&1; then
+    kubectl -n octelium create secret tls cert-cluster \\
+        --cert="$live_dir/fullchain.pem" \\
+        --key="$live_dir/privkey.pem" \\
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+fi
+EOF
+    chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/octelium-cert-sync.sh
+
+    local -a domain_args=()
+    local d
+    while IFS= read -r d; do
+        [[ -n $d ]] && domain_args+=(-d "$d")
+    done < <(
+        printf '%s\n' "$sans" \
+            | tr ',' '\n' \
+            | sed -n 's/.*DNS:\([A-Za-z0-9.*-]*\).*/\1/p' \
+            | awk -v req="$required_fqdn" 'BEGIN { seen[req]=1; print req } !seen[$0]++ { print $0 }'
+    )
+
+    certbot certonly --cert-name "$domain" --standalone --http-01-port 18080 \
+        --pre-hook "iptables -t nat -I PREROUTING 1 -p tcp --dport 80 -j REDIRECT --to-ports 18080" \
+        --post-hook "iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 18080 2>/dev/null || true" \
+        --expand --non-interactive --agree-tos "${domain_args[@]}"
+    /etc/letsencrypt/renewal-hooks/deploy/octelium-cert-sync.sh
+}
+
 usage() {
     cat <<'EOF'
 Usage: ./oscar-hub.sh <command> [options]
@@ -361,9 +405,9 @@ EOF
 kind: Secret
 metadata:
   name: oscar-tunnel-shared-secret
-spec:
-  data:
-    value: "$tunnel_shared_secret"
+spec: {}
+data:
+  value: "$tunnel_shared_secret"
 EOF
     chmod 0600 "$rendered_dir/octelium-secrets.yaml"
 
@@ -376,9 +420,9 @@ EOF
 kind: Secret
 metadata:
   name: oscar-authentik-client-secret
-spec:
-  data:
-    value: "$oidc_client_secret"
+spec: {}
+data:
+  value: "$oidc_client_secret"
 ---
 kind: IdentityProvider
 metadata:
@@ -400,6 +444,7 @@ EOF
         chmod 0600 "$rendered_dir/octelium-idp.yaml"
 
         if [[ $dry_run != true ]]; then
+            maybe_refresh_certbot_san "$domain" "auth.$domain" "$dry_run"
             info "Waiting for Authentik OIDC discovery endpoint (https://auth.$domain/application/o/oscar-federation-sso/.well-known/openid-configuration)..."
             for _ in $(seq 1 36); do
                 if curl -fsSL --max-time 5 "https://auth.$domain/application/o/oscar-federation-sso/.well-known/openid-configuration" >/dev/null 2>&1; then
@@ -529,6 +574,7 @@ EOF
 
     info "Registering OSCAR site '$site_slug' ($site_slug.$hub_domain -> $connector_user) on Octelium..."
     run_octeliumctl "$dry_run" "$hub_domain" apply "$site_manifest"
+    maybe_refresh_certbot_san "$hub_domain" "$site_slug.$hub_domain" "$dry_run"
 
     if [[ $no_mint_token != true ]]; then
         if [[ $dry_run == true ]]; then
