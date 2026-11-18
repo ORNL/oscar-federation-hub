@@ -554,7 +554,22 @@ EOF
           matchAny: true
         eval: |
           {
+            "tls": {
+              "insecureSkipVerify": true
+            },
+            "upstream": {
+              "user": "__CONNECTOR_USER__",
+              "url": "https://gateway:8443"
+            },
             "http": {
+              "auth": {
+                "custom": {
+                  "header": "X-Oscar-Tunnel-Secret",
+                  "value": {
+                    "fromSecret": "oscar-tunnel-shared-secret"
+                  }
+                }
+              },
               "header": {
                 "authorizationMode": "PASS",
                 "host": { "preserve": true },
