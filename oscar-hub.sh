@@ -357,15 +357,14 @@ spec:
   isPublic: true
   isAnonymous: true
   config:
+    tls:
+      insecureSkipVerify: true
     http:
       header:
         host:
           preserve: true
-        addRequestHeaders:
-          - key: X-Forwarded-Proto
-            value: https
     upstream:
-      url: http://authentik-server.oscar-authentik.svc:9000
+      url: https://authentik-server.oscar-authentik.svc:9443
 EOF
 )
             if [[ $dry_run == true ]]; then

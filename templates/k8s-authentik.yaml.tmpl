@@ -180,7 +180,10 @@ spec:
             - name: AUTHENTIK_ERROR_REPORTING__ENABLED
               value: "false"
           ports:
-            - containerPort: 9000
+            - name: http
+              containerPort: 9000
+            - name: https
+              containerPort: 9443
           volumeMounts:
             - name: blueprint
               mountPath: /blueprints/custom/oscar-federation.yaml
@@ -206,8 +209,12 @@ spec:
   selector:
     app: authentik-server
   ports:
-    - port: 9000
+    - name: http
+      port: 9000
       targetPort: 9000
+    - name: https
+      port: 9443
+      targetPort: 9443
 ---
 apiVersion: apps/v1
 kind: Deployment
