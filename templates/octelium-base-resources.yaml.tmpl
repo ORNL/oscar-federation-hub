@@ -7,7 +7,7 @@ spec:
     - name: allow-oscar-services
       effect: ALLOW
       condition:
-        match: 'ctx.service.spec.mode == "WEB" && !ctx.service.metadata.isSystem'
+        match: 'ctx.namespace.metadata.name == "default" && ctx.service.spec.mode in ["HTTP", "WEB"]'
 ---
 kind: Group
 metadata:
