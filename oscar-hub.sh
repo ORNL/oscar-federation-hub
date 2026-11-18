@@ -368,8 +368,8 @@ EOF
     chmod 0600 "$rendered_dir/octelium-secrets.yaml"
 
     info "Applying base Octelium secrets, policies, and OSCAR RBAC groups..."
-    run_octeliumctl "$dry_run" "$domain" apply -f "$rendered_dir/octelium-secrets.yaml"
-    run_octeliumctl "$dry_run" "$domain" apply -f "$rendered_dir/octelium-base.yaml"
+    run_octeliumctl "$dry_run" "$domain" apply --include-secret "$rendered_dir/octelium-secrets.yaml"
+    run_octeliumctl "$dry_run" "$domain" apply "$rendered_dir/octelium-base.yaml"
 
     if [[ $with_authentik == true ]]; then
         cat >"$rendered_dir/octelium-idp.yaml" <<EOF
@@ -409,7 +409,7 @@ EOF
             done
         fi
         info "Registering Authentik OIDC IdentityProvider in Octelium..."
-        run_octeliumctl "$dry_run" "$domain" apply -f "$rendered_dir/octelium-idp.yaml"
+        run_octeliumctl "$dry_run" "$domain" apply --include-secret "$rendered_dir/octelium-idp.yaml"
         if [[ $dry_run != true ]]; then
             install_sync_systemd_timer
             cmd_sync_users || true
@@ -528,7 +528,7 @@ EOF
     chmod 0600 "$site_manifest"
 
     info "Registering OSCAR site '$site_slug' ($site_slug.$hub_domain -> $connector_user) on Octelium..."
-    run_octeliumctl "$dry_run" "$hub_domain" apply -f "$site_manifest"
+    run_octeliumctl "$dry_run" "$hub_domain" apply "$site_manifest"
 
     if [[ $no_mint_token != true ]]; then
         if [[ $dry_run == true ]]; then
@@ -686,7 +686,7 @@ with open(out_path, "w", encoding="utf-8") as fh:
 PY
     chmod 0600 "$sync_manifest"
     if [[ -s $sync_manifest ]]; then
-        run_octeliumctl "false" "$hub_domain" apply -f "$sync_manifest"
+        run_octeliumctl "false" "$hub_domain" apply "$sync_manifest"
     fi
 }
 
@@ -733,7 +733,7 @@ EOF
     chmod 0600 "$user_manifest"
 
     info "Applying Octelium HUMAN user '$username' (group: $group)..."
-    run_octeliumctl "$dry_run" "$hub_domain" apply -f "$user_manifest"
+    run_octeliumctl "$dry_run" "$hub_domain" apply "$user_manifest"
     info "Minting clientless browser sign-in credential ($expire_in) for https://$hub_domain/login :"
     run_octeliumctl "$dry_run" "$hub_domain" create cred --user "$username" --session-type clientless --expire-in "$expire_in"
 }
