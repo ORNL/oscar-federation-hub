@@ -361,6 +361,9 @@ spec:
       header:
         host:
           preserve: true
+        addRequestHeaders:
+          - key: X-Forwarded-Proto
+            value: https
     upstream:
       url: http://authentik-server.oscar-authentik.svc:9000
 EOF

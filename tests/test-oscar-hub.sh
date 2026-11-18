@@ -47,6 +47,7 @@ assert_file_mode "$state_a/rendered/octelium-base.yaml" 600
 assert_file_mode "$state_a/rendered/octelium-idp.yaml" 600
 
 assert_contains "$state_a/rendered/octelium-base.yaml" "url: http://authentik-server.oscar-authentik.svc:9000"
+assert_contains "$state_a/rendered/octelium-base.yaml" "key: X-Forwarded-Proto"
 assert_contains "$state_a/rendered/octelium-idp.yaml" "issuerURL: https://auth.hub.example.org/application/o/oscar-federation-sso/"
 assert_contains "$state_a/rendered/octelium-idp.yaml" "fromSecret: oscar-authentik-client-secret"
 assert_contains "$state_a/rendered/oscar-federation.yaml" "name: oscar-admins"
