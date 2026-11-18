@@ -72,8 +72,8 @@ assert_file_mode "$state_a/sites/north-gate.yaml" 600
 assert_file_mode "$state_a/tokens/north-gate.token" 600
 assert_contains "$state_a/sites/north-gate.yaml" "mode: WEB"
 assert_contains "$state_a/sites/north-gate.yaml" "fromSecret: oscar-tunnel-shared-secret"
-assert_contains "$state_a/sites/north-gate.yaml" "key: X-Octelium-User"
-assert_contains "$state_a/sites/north-gate.yaml" "key: X-Octelium-Groups"
+assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-User"'
+assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-Groups"'
 
 status_out=$(OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" status)
 grep -Fq -- "https://north-gate.hub.example.org" <<<"$status_out"

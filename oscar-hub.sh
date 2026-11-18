@@ -548,11 +548,29 @@ cmd_add_site() {
 EOF
 )
         trusted_headers_block=$(cat <<'EOF'
-        addRequestHeaders:
-          - key: X-Octelium-User
-            eval: 'ctx.user.metadata.name'
-          - key: X-Octelium-Groups
-            eval: '("oscar-admins" in ctx.user.spec.groups ? "oscar-admins," : "") + ("oscar-operators" in ctx.user.spec.groups ? "oscar-operators," : "") + ("oscar-viewers" in ctx.user.spec.groups ? "oscar-viewers" : "")'
+  dynamicConfig:
+    rules:
+      - condition:
+          matchAny: true
+        eval: |
+          {
+            "http": {
+              "header": {
+                "authorizationMode": "PASS",
+                "host": { "preserve": true },
+                "addRequestHeaders": [
+                  {
+                    "key": "X-Octelium-User",
+                    "value": ctx.user.metadata.name
+                  },
+                  {
+                    "key": "X-Octelium-Groups",
+                    "value": (has(ctx.user.spec.groups) && "oscar-admins" in ctx.user.spec.groups ? "oscar-admins," : "") + (has(ctx.user.spec.groups) && "oscar-operators" in ctx.user.spec.groups ? "oscar-operators," : "") + (has(ctx.user.spec.groups) && "oscar-viewers" in ctx.user.spec.groups ? "oscar-viewers" : "")
+                  }
+                ]
+              }
+            }
+          }
 EOF
 )
     fi

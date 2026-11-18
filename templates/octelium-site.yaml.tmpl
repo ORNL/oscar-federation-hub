@@ -12,6 +12,7 @@ metadata:
 spec:
   mode: WEB
   isPublic: true
+__TRUSTED_HEADERS_BLOCK__
   config:
     tls:
       insecureSkipVerify: true
@@ -21,7 +22,6 @@ __TRUSTED_AUTH_BLOCK__
         authorizationMode: PASS
         host:
           preserve: true
-__TRUSTED_HEADERS_BLOCK__
     upstream:
       user: __CONNECTOR_USER__
       url: https://gateway:8443
