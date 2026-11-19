@@ -71,6 +71,8 @@ OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" add-site north-gat
 assert_file_mode "$state_a/sites/north-gate.yaml" 600
 assert_file_mode "$state_a/tokens/north-gate.token" 600
 assert_contains "$state_a/sites/north-gate.yaml" "mode: WEB"
+assert_contains "$state_a/sites/north-gate.yaml" "allowClusterServices: true"
+assert_contains "$state_a/sites/north-gate.yaml" '"allowClusterServices": true'
 assert_contains "$state_a/sites/north-gate.yaml" "fromSecret: oscar-tunnel-shared-secret"
 assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-User"'
 assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-Groups"'

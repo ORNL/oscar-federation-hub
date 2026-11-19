@@ -529,6 +529,9 @@ cmd_add_site() {
     [[ -n $site_slug ]] || fail "Site slug is required (e.g. ./oscar-hub.sh add-site north-gate)."
     valid_slug "$site_slug" || fail "Invalid site slug '$site_slug' (use lowercase letters, digits, and hyphens)."
     valid_duration "$expire_in" || fail "Invalid --expire-in '$expire_in' (examples: 30days, 90days, 6months)."
+    if [[ -z $connector_user && $no_mint_token == true && -f "$sites_dir/$site_slug.yaml" ]]; then
+        connector_user=$(awk '/^      user:/ { print $2; exit }' "$sites_dir/$site_slug.yaml")
+    fi
     [[ -n $connector_user ]] || connector_user="oscar-node-$site_slug"
     valid_username "$connector_user" || fail "Invalid --connector-user '$connector_user'."
     [[ -n $display_name ]] || display_name="OSCAR Site ($site_slug)"
@@ -570,17 +573,26 @@ EOF
                   }
                 }
               },
+              "cors": {
+                "allowClusterServices": true,
+                "allowCredentials": true,
+                "allowOriginStringMatch": ["*"],
+                "allowMethods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+                "allowHeaders": "Authorization, Content-Type, Accept, Origin, If-None-Match, X-OSCAR-HLS-Viewer",
+                "exposeHeaders": "ETag, Content-Disposition",
+                "maxAge": "1800"
+              },
               "header": {
                 "authorizationMode": "PASS",
                 "host": { "preserve": true },
                 "addRequestHeaders": [
                   {
                     "key": "X-Octelium-User",
-                    "value": ctx.user.metadata.name
+                    "value": has(ctx.user) ? ctx.user.metadata.name : ""
                   },
                   {
                     "key": "X-Octelium-Groups",
-                    "value": (has(ctx.user.spec.groups) && "oscar-admins" in ctx.user.spec.groups ? "oscar-admins," : "") + (has(ctx.user.spec.groups) && "oscar-operators" in ctx.user.spec.groups ? "oscar-operators," : "") + (has(ctx.user.spec.groups) && "oscar-viewers" in ctx.user.spec.groups ? "oscar-viewers" : "")
+                    "value": (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-admins" in ctx.user.spec.groups ? "oscar-admins," : "") + (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-operators" in ctx.user.spec.groups ? "oscar-operators," : "") + (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-viewers" in ctx.user.spec.groups ? "oscar-viewers" : "")
                   }
                 ]
               }
@@ -723,16 +735,21 @@ cmd_sync_users() {
         -H "Authorization: Bearer $sync_token" \
         "https://auth.$hub_domain/api/v3/core/users/?page_size=500") || fail "Could not query Authentik users API."
 
-    python3 - "$users_json" "$sync_manifest" <<'PY'
+    local active_names_file="$rendered_dir/synced-authentik-usernames.txt"
+    python3 - "$users_json" "$sync_manifest" "$active_names_file" <<'PY'
 import json, re, sys
 
 payload = json.loads(sys.argv[1])
 out_path = sys.argv[2]
+names_path = sys.argv[3]
 allowed_groups = {"oscar-admins", "oscar-operators", "oscar-viewers"}
 docs = []
+active_names = []
 
 for u in payload.get("results", []):
     if u.get("type") not in (None, "internal", "external"):
+        continue
+    if not u.get("is_active", True):
         continue
     raw_username = (u.get("username") or "").strip().lower()
     email = (u.get("email") or "").strip()
@@ -748,26 +765,58 @@ for u in payload.get("results", []):
     )
     if not groups:
         continue
-    is_disabled = "false" if u.get("is_active", True) else "true"
+    active_names.append(safe_name)
     group_lines = "\n".join(f"    - {g}" for g in groups)
     docs.append(
         f"kind: User\n"
         f"metadata:\n"
         f"  name: {safe_name}\n"
+        f"  labels:\n"
+        f"    managed-by: authentik-sync\n"
         f"spec:\n"
         f"  type: HUMAN\n"
         f"  email: {email}\n"
-        f"  isDisabled: {is_disabled}\n"
+        f"  isDisabled: false\n"
         f"  groups:\n"
         f"{group_lines}\n"
     )
 
 with open(out_path, "w", encoding="utf-8") as fh:
     fh.write("---\n".join(docs))
+with open(names_path, "w", encoding="utf-8") as nfh:
+    nfh.write("\n".join(sorted(set(active_names))) + ("\n" if active_names else ""))
 PY
-    chmod 0600 "$sync_manifest"
+    chmod 0600 "$sync_manifest" "$active_names_file"
     if [[ -s $sync_manifest ]]; then
         run_octeliumctl "false" "$hub_domain" apply "$sync_manifest"
+    fi
+
+    # Prune any Authentik-managed Octelium HUMAN users that were deleted, disabled, or stripped of OSCAR groups
+    local octelium_users_json stale_user
+    if octelium_users_json=$(OCTELIUM_DOMAIN="$hub_domain" octeliumctl get user -o json 2>/dev/null); then
+        while IFS= read -r stale_user; do
+            [[ -n $stale_user ]] || continue
+            info "Revoking deleted/deactivated Authentik user '$stale_user' from Octelium..."
+            run_octeliumctl "false" "$hub_domain" delete user "$stale_user" || true
+        done < <(
+            python3 - "$octelium_users_json" "$active_names_file" <<'PY'
+import json, sys
+
+oct_data = json.loads(sys.argv[1])
+with open(sys.argv[2], encoding="utf-8") as fh:
+    active = {line.strip() for line in fh if line.strip()}
+
+for item in oct_data.get("items", []):
+    spec = item.get("spec") or {}
+    meta = item.get("metadata") or {}
+    name = (meta.get("name") or "").strip()
+    labels = meta.get("labels") or {}
+    if spec.get("type") != "HUMAN" or not name:
+        continue
+    if labels.get("managed-by") == "authentik-sync" and name not in active:
+        print(name)
+PY
+        )
     fi
 }
 

@@ -101,13 +101,14 @@ When `--with-trusted-headers` is passed to `./oscar-hub.sh add-site`, the Hub's 
 
 ---
 
-## 3. Node-to-Node Data Federation (`oscar_fed_*` Service Tokens)
+## 3. Node-to-Node Data Federation, Multi-Node Vehicle Search & Consolidated Reporting (`oscar_fed_*` Service Tokens)
 
-Human SSO handles **operator browser access**, while **Node Federation** (aggregating live alarms, video, and national summaries onto a Central OSCAR server) uses dedicated machine credentials so revoking an employee never breaks site-to-central telemetry:
+Human SSO handles **operator browser access**, while **Node Federation** (aggregating live alarms, video, multi-node vehicle crossings, and consolidated incident reports onto a primary OSCAR server) uses dedicated machine credentials so revoking an employee never breaks site-to-central telemetry. Every site registered via `./oscar-hub.sh add-site` automatically enables authenticated cross-service CORS (`allowClusterServices: true` and `allowCredentials: true`) across `*.<hub-domain>` while preserving `Authorization: Bearer oscar_fed_...` and WebSocket MQTT (`wss://<site>.<hub-domain>/sensorhub/mqtt`):
 
-1. On each remote site OSCAR Viewer, open **Users -> Federation Tokens** and click **Mint Service Token**.
-2. Click **Add Remote Server on Servers Page** (or copy the `oscar_fed_...` token to your Central OSCAR server's **Servers -> Add Node -> Federation Service Token** mode).
-3. Enter the site's Hub hostname (`north-gate.hub.example.org`, TLS port `443`, Base Path `/sensorhub`) and save.
+1. **Mint a Scoped Service Token on the Remote Node:** Sign into the remote OSCAR Viewer (for example, `https://west-gate.hub.example.org`), open **Users & Access (`/users`) -> Federation Tokens**, enter a descriptive label, choose `Viewer` (read-only monitoring/search/reporting) or `Operator` (cross-node linked adjudication), and click **Create Federation Token**. Copy the generated `oscar_fed_<shortId>_<secret>` token.
+2. **Add the Remote Server on the Primary OSCAR Node:** On your primary/HQ OSCAR Viewer (for example, `https://central-hq.hub.example.org`), open **Servers (`/servers?auth=bearer`)** (or click **Add Server -> Use Federation Token (`oscar_fed_...`)**), enter a clear site **Name** (e.g., `West Gate Portal`), enter **Address** `west-gate.hub.example.org` with **Port** `443` and **Use a secure connection** (`HTTPS`) checked, paste the `oscar_fed_...` token, and click **Add Node**.
+3. **Run a Multi-Node Vehicle Search (`Events -> Compare Passes`):** Open **Events (`/event-log`)**, enter a shipping container or license plate in the **Vehicle ID** search bar (ISO 6346 container numbers and plates normalize punctuation automatically), and click **Compare Passes**. OSCAR queries both the local node and every federated remote node in parallel, displaying side-by-side transits with each server's name, saved OCR/keyframe crops, and overlaid gamma/neutron profiles.
+4. **Generate a Multi-Node Consolidated Vehicle Incident Report (`Report Generator` or Dialog Export):** Either click **Export PDF / CSV / JSON / XLSX** directly inside **Compare Vehicle Crossings**, or open **Report Generator (`/report`)**, select **Vehicle Incident (`VEHICLE_INCIDENT`)**, enter the **Vehicle ID**, keep **Include Federated Servers** checked, and click **Generate Report** to produce a single report combining crossings from all federated OSCAR nodes.
 
 ---
 
@@ -126,3 +127,32 @@ The bundled Blueprint (`blueprints/oscar-federation.yaml.tmpl`) pre-wires two Pa
    - `oscar-operators` (`Operator`)
    - `oscar-viewers` (`Viewer`)
 4. **Generate & Send the Single-Use SSO Passkey Setup Link:** Return to the **Overview** tab on that user's page, click **Create recovery link** under **Recovery**, copy the single-use `https://auth.hub.example.org/if/flow/oscar-passkey-onboarding/?token=...` link, and send it to the user. When the user opens the link, they register their Passkey in one tap and can immediately sign in to any federated OSCAR site (`https://<site>.hub.example.org`) via **Organization SSO -> Use a security key**.
+
+---
+
+## 5. Offboarding & Permanently Deleting Federated Users (3-Layer Revocation)
+
+When an operator, viewer, or contractor leaves the organization, complete access revocation removes the identity at all three layers so zero active sessions, Passkeys, tunnel routes, or cached OSCAR user entries remain:
+
+1. **Delete the User in Authentik (`https://auth.hub.example.org/if/admin/#/identity/users`):**
+   - Open **Directory -> Users**, select the user row(s) to revoke, click **Delete** in the toolbar, and confirm **Delete** in the confirmation dialog.
+   - Deleting the Authentik user immediately destroys all enrolled WebAuthn Passkeys, recovery links, and OIDC refresh grants for that user.
+2. **Verify Automatic Octelium Zero-Trust Hub Purge (`oscar-hub-sync.timer` / `sync-users`):**
+   - Every user synced from Authentik carries the label `managed-by: authentik-sync`. Within **30 seconds**, `oscar-hub-sync.timer` automatically invokes `octeliumctl delete user <username>` for any user deleted, deactivated, or removed from `oscar-*` groups in Authentik.
+   - To force immediate zero-second reconciliation on the Hub host and verify removal:
+     ```bash
+     sudo -H /opt/oscar-federation-hub/oscar-hub.sh sync-users
+     sudo -H OCTELIUM_DOMAIN=hub.example.org octeliumctl get user
+     ```
+3. **Remove Any Cached User Rows in OSCAR (`Users & Access -> Users & Roles`):**
+   - Sign into each federated OSCAR node (`/users`), open the **Users & Roles** tab, click **Sign Out Devices** (if any browser session was still active) followed by **Delete** on the offboarded username, and confirm **Delete**.
+   - Attempting to sign in via **Organization SSO** as the deleted user now fails immediately at the Hub authentication boundary.
+
+---
+
+## 6. 24/7 Unattended Wallboards & Automatic Tunnel Session Self-Heal
+
+Control-room wallboards running continuously over Verified Tunnel Header SSO (`--with-trusted-headers`) stay authenticated 24/7 without manual browser refreshes:
+
+- When an upstream tunnel proxy token or cookie rotates on a background XHR/ConSys `fetch`, the browser receives an opaque CORS redirect or `401`/`403` from the Zero-Trust edge before hitting OSCAR.
+- OSCAR's `TunnelSessionSelfHeal` client guard detects cross-origin tunnel re-auth challenges automatically, silently refreshes the tunnel session via a hidden same-site handshake (with exponential cooldown so transient WAN blips never cause reload loops), and resumes live `5 Hz` MQTT radiation plots and Dashboard alarm queues uninterrupted.

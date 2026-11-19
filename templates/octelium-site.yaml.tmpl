@@ -18,6 +18,15 @@ __TRUSTED_HEADERS_BLOCK__
       insecureSkipVerify: true
     http:
 __TRUSTED_AUTH_BLOCK__
+      cors:
+        allowClusterServices: true
+        allowCredentials: true
+        allowOriginStringMatch:
+          - "*"
+        allowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+        allowHeaders: "Authorization, Content-Type, Accept, Origin, If-None-Match, X-OSCAR-HLS-Viewer"
+        exposeHeaders: "ETag, Content-Disposition"
+        maxAge: "1800"
       header:
         authorizationMode: PASS
         host:
