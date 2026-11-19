@@ -108,3 +108,21 @@ Human SSO handles **operator browser access**, while **Node Federation** (aggreg
 1. On each remote site OSCAR Viewer, open **Users -> Federation Tokens** and click **Mint Service Token**.
 2. Click **Add Remote Server on Servers Page** (or copy the `oscar_fed_...` token to your Central OSCAR server's **Servers -> Add Node -> Federation Service Token** mode).
 3. Enter the site's Hub hostname (`north-gate.hub.example.org`, TLS port `443`, Base Path `/sensorhub`) and save.
+
+---
+
+## 4. Adding Federated Users & Sending 1-Tap SSO Passkey Setup Links in Authentik
+
+The bundled Blueprint (`blueprints/oscar-federation.yaml.tmpl`) pre-wires two Passkey flows automatically:
+- **`oscar-passkey-onboarding`** (`Set Up Your OSCAR SSO Passkey`) — bound as the Brand's **Recovery Flow**, so clicking **Create recovery link** on any user generates a single-use URL that immediately enrolls their discoverable FIDO2 Passkey (Face ID, Touch ID, Windows Hello, or YubiKey) and signs them in without needing a password.
+- **`oscar-passkey-login`** (`Sign In with OSCAR SSO Passkey`) — bound as the Identification Stage's **Passwordless Flow**, adding a 1-click **Use a security key** Passkey button directly on the Authentik SSO sign-in card.
+
+### 4-Step Admin Onboarding Workflow
+
+1. **Open Authentik Admin (`https://auth.hub.example.org/if/admin/`):** Sign in with an administrator account (member of `authentik Admins`) and select **Directory -> Users -> Create**.
+2. **Create the User Record:** Enter a lowercase **Username** (e.g. `alexe`), **Name** (`Alex E`), and **Email** (`alexe@example.org` — required so the 30-second `oscar-hub-sync.timer` reconciles the user into Octelium), leaving **User type** set to `Internal`, then click **Create**.
+3. **Assign the OSCAR Role Group:** Click the new username in the table, open the **Groups** tab, click **Add to existing group**, and add one of:
+   - `oscar-admins` (`Administrator`)
+   - `oscar-operators` (`Operator`)
+   - `oscar-viewers` (`Viewer`)
+4. **Generate & Send the Single-Use SSO Passkey Setup Link:** Return to the **Overview** tab on that user's page, click **Create recovery link** under **Recovery**, copy the single-use `https://auth.hub.example.org/if/flow/oscar-passkey-onboarding/?token=...` link, and send it to the user. When the user opens the link, they register their Passkey in one tap and can immediately sign in to any federated OSCAR site (`https://<site>.hub.example.org`) via **Organization SSO -> Use a security key**.
