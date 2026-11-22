@@ -34,3 +34,31 @@ __TRUSTED_AUTH_BLOCK__
     upstream:
       user: __CONNECTOR_USER__
       url: https://gateway:8443
+---
+kind: Service
+metadata:
+  name: __SITE_SLUG__-sandbox
+  displayName: "__SITE_DISPLAY_NAME__ (Practice Sandbox)"
+spec:
+  mode: WEB
+  isPublic: true
+__SANDBOX_TRUSTED_HEADERS_BLOCK__
+  config:
+    http:
+__TRUSTED_AUTH_BLOCK__
+      cors:
+        allowClusterServices: true
+        allowCredentials: true
+        allowOriginStringMatch:
+          - "*"
+        allowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+        allowHeaders: "Authorization, Content-Type, Accept, Origin, If-None-Match, X-OSCAR-HLS-Viewer"
+        exposeHeaders: "ETag, Content-Disposition"
+        maxAge: "1800"
+      header:
+        authorizationMode: PASS
+        host:
+          preserve: true
+    upstream:
+      user: __CONNECTOR_USER__
+      url: http://127.0.0.1:18444

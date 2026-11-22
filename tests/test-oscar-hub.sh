@@ -73,12 +73,15 @@ assert_file_mode "$state_a/tokens/north-gate.token" 600
 assert_contains "$state_a/sites/north-gate.yaml" "mode: WEB"
 assert_contains "$state_a/sites/north-gate.yaml" "allowClusterServices: true"
 assert_contains "$state_a/sites/north-gate.yaml" '"allowClusterServices": true'
+assert_contains "$state_a/sites/north-gate.yaml" "name: north-gate-sandbox"
+assert_contains "$state_a/sites/north-gate.yaml" "url: http://127.0.0.1:18444"
 assert_contains "$state_a/sites/north-gate.yaml" "fromSecret: oscar-tunnel-shared-secret"
 assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-User"'
 assert_contains "$state_a/sites/north-gate.yaml" '"key": "X-Octelium-Groups"'
 
 status_out=$(OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" status)
 grep -Fq -- "https://north-gate.hub.example.org" <<<"$status_out"
+grep -Fq -- "https://north-gate-sandbox.hub.example.org" <<<"$status_out"
 
 OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" sync-users --dry-run >/dev/null
 OSCAR_HUB_STATE_DIR="$state_a" bash "$repo_root/oscar-hub.sh" upgrade --dry-run >/dev/null
