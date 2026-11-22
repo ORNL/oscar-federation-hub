@@ -21,7 +21,7 @@ OSCAR `3.11.0+` stores an explicit `authSource` per user record (`local`, `oidc`
 
 ### Step 2.1 — Attach the Outbound Tunnel Connector
 
-On the Hub host, register the OSCAR site:
+On the Hub host, register the OSCAR site (which provisions both `https://north-gate.hub.example.org` for live operations and `https://north-gate-sandbox.hub.example.org` for OSCAR `3.11.5+`'s isolated Practice Sandbox on the same outbound connector token):
 
 ```bash
 ./oscar-hub.sh add-site north-gate \

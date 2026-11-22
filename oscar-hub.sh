@@ -537,7 +537,7 @@ cmd_add_site() {
     [[ -n $display_name ]] || display_name="OSCAR Site ($site_slug)"
     [[ $display_name != *\"* && $display_name != *$'\n'* ]] || fail "Display name cannot contain quotes or newlines."
 
-    local hub_domain with_authentik trusted_auth_block="" trusted_headers_block=""
+    local hub_domain with_authentik trusted_auth_block="" trusted_headers_block="" sandbox_trusted_headers_block=""
     hub_domain=$(read_kv "$config_file" HUB_DOMAIN)
     with_authentik=$(read_kv "$config_file" WITH_AUTHENTIK)
 
@@ -600,6 +600,53 @@ EOF
           }
 EOF
 )
+        sandbox_trusted_headers_block=$(cat <<'EOF'
+  dynamicConfig:
+    rules:
+      - condition:
+          matchAny: true
+        eval: |
+          {
+            "upstream": {
+              "user": "__CONNECTOR_USER__",
+              "url": "http://127.0.0.1:18444"
+            },
+            "http": {
+              "auth": {
+                "custom": {
+                  "header": "X-Oscar-Tunnel-Secret",
+                  "value": {
+                    "fromSecret": "oscar-tunnel-shared-secret"
+                  }
+                }
+              },
+              "cors": {
+                "allowClusterServices": true,
+                "allowCredentials": true,
+                "allowOriginStringMatch": ["*"],
+                "allowMethods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+                "allowHeaders": "Authorization, Content-Type, Accept, Origin, If-None-Match, X-OSCAR-HLS-Viewer",
+                "exposeHeaders": "ETag, Content-Disposition",
+                "maxAge": "1800"
+              },
+              "header": {
+                "authorizationMode": "PASS",
+                "host": { "preserve": true },
+                "addRequestHeaders": [
+                  {
+                    "key": "X-Octelium-User",
+                    "value": has(ctx.user) ? ctx.user.metadata.name : ""
+                  },
+                  {
+                    "key": "X-Octelium-Groups",
+                    "value": (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-admins" in ctx.user.spec.groups ? "oscar-admins," : "") + (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-operators" in ctx.user.spec.groups ? "oscar-operators," : "") + (has(ctx.user) && has(ctx.user.spec.groups) && "oscar-viewers" in ctx.user.spec.groups ? "oscar-viewers" : "")
+                  }
+                ]
+              }
+            }
+          }
+EOF
+)
     fi
 
     local esc_slug esc_display esc_conn site_manifest="$sites_dir/$site_slug.yaml" token_file="$tokens_dir/$site_slug.token"
@@ -607,11 +654,13 @@ EOF
     esc_display=$(escape_sed_replacement "$display_name")
     esc_conn=$(escape_sed_replacement "$connector_user")
 
-    awk -v ab="$trusted_auth_block" -v hb="$trusted_headers_block" '{
+    awk -v ab="$trusted_auth_block" -v hb="$trusted_headers_block" -v shb="$sandbox_trusted_headers_block" '{
         if ($0 == "__TRUSTED_AUTH_BLOCK__") {
             if (length(ab) > 0) print ab
         } else if ($0 == "__TRUSTED_HEADERS_BLOCK__") {
             if (length(hb) > 0) print hb
+        } else if ($0 == "__SANDBOX_TRUSTED_HEADERS_BLOCK__") {
+            if (length(shb) > 0) print shb
         } else {
             print $0
         }
@@ -619,9 +668,10 @@ EOF
         | sed -e "s/__SITE_SLUG__/$esc_slug/g" -e "s/__SITE_DISPLAY_NAME__/$esc_display/g" -e "s/__CONNECTOR_USER__/$esc_conn/g" >"$site_manifest"
     chmod 0600 "$site_manifest"
 
-    info "Registering OSCAR site '$site_slug' ($site_slug.$hub_domain -> $connector_user) on Octelium..."
+    info "Registering OSCAR site '$site_slug' ($site_slug.$hub_domain + $site_slug-sandbox.$hub_domain -> $connector_user) on Octelium..."
     run_octeliumctl "$dry_run" "$hub_domain" apply "$site_manifest"
     maybe_refresh_certbot_san "$hub_domain" "$site_slug.$hub_domain" "$dry_run"
+    maybe_refresh_certbot_san "$hub_domain" "$site_slug-sandbox.$hub_domain" "$dry_run"
 
     if [[ $no_mint_token != true ]]; then
         if [[ $dry_run == true ]]; then
@@ -636,7 +686,8 @@ EOF
     cat <<EOF
 
 ========================================================================
-Site Registered: https://$site_slug.$hub_domain
+Site Registered:          https://$site_slug.$hub_domain
+Practice Sandbox Tunnel:  https://$site_slug-sandbox.$hub_domain
 ========================================================================
 EOF
     if [[ $no_mint_token != true ]]; then
@@ -702,8 +753,9 @@ cmd_remove_site() {
 
     local hub_domain
     hub_domain=$(read_kv "$config_file" HUB_DOMAIN)
-    info "Removing Octelium Service '$site_slug' and Workload User '$connector_user'..."
+    info "Removing Octelium Services '$site_slug' / '$site_slug-sandbox' and Workload User '$connector_user'..."
     run_octeliumctl "$dry_run" "$hub_domain" delete service "$site_slug"
+    run_octeliumctl "$dry_run" "$hub_domain" delete service "$site_slug-sandbox" || true
     run_octeliumctl "$dry_run" "$hub_domain" delete user "$connector_user"
     rm -f -- "$sites_dir/$site_slug.yaml" "$tokens_dir/$site_slug.token"
     info "Removed site '$site_slug'."
@@ -908,7 +960,7 @@ cmd_status() {
         found=true
         local slug=${site_file##*/}
         slug=${slug%.yaml}
-        printf '  - %s (https://%s.%s)\n' "$slug" "$slug" "$hub_domain"
+        printf '  - %s (https://%s.%s | sandbox: https://%s-sandbox.%s)\n' "$slug" "$slug" "$hub_domain" "$slug" "$hub_domain"
     done
     [[ $found == true ]] || printf '  (none yet — run ./oscar-hub.sh add-site <slug>)\n'
 

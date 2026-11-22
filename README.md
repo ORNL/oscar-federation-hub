@@ -53,7 +53,7 @@ All generated credentials, OIDC secrets, and site connector tokens are written w
 
 ### Step 2 — Register Each Federated OSCAR Site
 
-Mint a least-privilege workload connector token and publish the site route (`https://north-gate.hub.example.org`) in one command:
+Mint a least-privilege workload connector token and publish both the operational site route (`https://north-gate.hub.example.org`) and its isolated ephemeral **Practice Sandbox** subdomain (`https://north-gate-sandbox.hub.example.org` for OSCAR `3.11.5+`, reusing the same connector token with hard browser origin isolation, automatic Let's Encrypt TLS, and shared Passkey `rpId`) in one command:
 
 ```bash
 ./oscar-hub.sh add-site north-gate \
